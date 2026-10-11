@@ -4,7 +4,12 @@ import { errorFromResponse } from "./errors.js";
 import { newIdempotencyKey } from "./idempotency.js";
 import type { RuntimeLogger } from "./logger.js";
 import { responseRequestId, responseTraceId } from "./request-id.js";
-import { FetchTransport, type FetchLike, type HttpTransport, type SendOptions } from "./transport/fetch.js";
+import {
+  FetchTransport,
+  type FetchLike,
+  type HttpTransport,
+  type SendOptions,
+} from "./transport/fetch.js";
 import { parseRetryAfterMs, requestWithRetry, type RetryOptions } from "./transport/retry.js";
 
 export type QueryParamValue = string | number | boolean | undefined | null;
@@ -95,7 +100,11 @@ export class BaseClient {
     this.#options.auth = new BearerAuth(token);
   }
 
-  protected async request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
+  protected async request<T>(
+    method: string,
+    path: string,
+    options: RequestOptions = {},
+  ): Promise<T> {
     const response = await this.requestRaw(method, path, options);
     if (!response.ok) await toError(response);
     if (response.status === 204) return undefined as T;
@@ -111,7 +120,10 @@ export class BaseClient {
    * Response — the SSE streaming path consumes this.
    */
   async requestRaw(method: string, path: string, options: RequestOptions = {}): Promise<Response> {
-    const headers = options.headers instanceof Headers ? new Headers(options.headers) : new Headers(options.headers);
+    const headers =
+      options.headers instanceof Headers
+        ? new Headers(options.headers)
+        : new Headers(options.headers);
     let body: BodyInit | undefined;
     if (options.rawBody !== undefined) {
       body = options.rawBody;
@@ -171,7 +183,14 @@ export class BaseClient {
         });
     };
     logger?.onRequest?.({ method, url, requestId: "", attempt: 0 });
-    return requestWithRetry(send, this.#options.retry);
+    const safeToRetry =
+      ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase()) ||
+      Boolean(headers.get("x-idempotency-key")?.trim());
+    return requestWithRetry(send, {
+      ...this.#options.retry,
+      ...(safeToRetry ? {} : { maxRetries: 0 }),
+      signal: options.signal,
+    });
   }
 
   /**

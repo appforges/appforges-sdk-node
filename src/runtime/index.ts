@@ -50,3 +50,6 @@ export { connectSSE, parseSSEFrame } from "./streaming.js";
 export type { SSEEvent, SSEStreamOptions } from "./streaming.js";
 export { newIdempotencyKey } from "./idempotency.js";
 export type { RuntimeLogger, RequestEvent, ResponseEvent, ErrorEvent } from "./logger.js";
+
+export { encodeUploadData } from "./upload.js";
+export { verifyWebhookSignature } from "./webhook.js";

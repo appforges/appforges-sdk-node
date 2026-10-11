@@ -8,6 +8,8 @@
  */
 
 export interface RetryOptions {
+  /** Cancellation applies to attempts and Retry-After waits. */
+  signal?: AbortSignal;
   /** Additional attempts after the first one. Default 2 (three attempts total). */
   maxRetries?: number;
   /** Backoff base in ms. Default 200. */
@@ -43,10 +45,18 @@ function isNetworkError(error: unknown): boolean {
 }
 
 function isAbortError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as { name?: string }).name === "AbortError";
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { name?: string }).name === "AbortError"
+  );
 }
 
-export function computeDelayMs(attempt: number, retryAfterMs: number | undefined, options: RetryOptions): number {
+export function computeDelayMs(
+  attempt: number,
+  retryAfterMs: number | undefined,
+  options: RetryOptions,
+): number {
   const base = options.baseDelayMs ?? 200;
   const max = options.maxDelayMs ?? 30_000;
   if (retryAfterMs !== undefined && retryAfterMs > 0) return retryAfterMs;
@@ -56,8 +66,28 @@ export function computeDelayMs(attempt: number, retryAfterMs: number | undefined
 }
 
 async function sleep(ms: number, options: RetryOptions): Promise<void> {
-  const sleepFn = options.sleep ?? ((duration: number) => new Promise<void>((resolve) => setTimeout(resolve, duration)));
-  await sleepFn(ms);
+  options.signal?.throwIfAborted();
+  await new Promise<void>((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (error?: unknown) => {
+      if (timer !== undefined) clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abort);
+      if (error !== undefined) reject(error);
+      else resolve();
+    };
+    const abort = () => finish(options.signal?.reason ?? new DOMException("Aborted", "AbortError"));
+    options.signal?.addEventListener("abort", abort, { once: true });
+    if (options.signal?.aborted) {
+      abort();
+      return;
+    }
+    if (options.sleep)
+      options.sleep(ms).then(
+        () => finish(),
+        (error: unknown) => finish(error),
+      );
+    else timer = setTimeout(() => finish(), ms);
+  });
 }
 
 /**
@@ -75,10 +105,12 @@ export async function requestWithRetry(
   let attempt = 0;
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    options.signal?.throwIfAborted();
     try {
       const response = await send(attempt);
       if (!retryableStatus(response.status) || attempt >= maxRetries) return response;
       const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+      await response.body?.cancel();
       await sleep(computeDelayMs(attempt, retryAfterMs, options), options);
       attempt += 1;
     } catch (error) {

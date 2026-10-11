@@ -21,7 +21,10 @@ export interface PaginatorOptions {
 }
 
 export class Paginator<TItem, TPage> {
-  readonly #fetchPage: (pageToken: string | undefined, pageSize: number | undefined) => Promise<TPage>;
+  readonly #fetchPage: (
+    pageToken: string | undefined,
+    pageSize: number | undefined,
+  ) => Promise<TPage>;
   readonly #project: PageProjection<TItem, TPage>;
   readonly #options: PaginatorOptions;
 
@@ -39,10 +42,13 @@ export class Paginator<TItem, TPage> {
     const maxPages = this.#options.maxPages ?? 10_000;
     let token: string | undefined;
     let pages = 0;
+    const seen = new Set<string>();
     // Loop until the server says there is no next cursor.
     for (;;) {
       if (pages >= maxPages) {
-        throw new Error(`paginator exceeded maxPages=${maxPages} (next_page_token did not terminate)`);
+        throw new Error(
+          `paginator exceeded maxPages=${maxPages} (next_page_token did not terminate)`,
+        );
       }
       const page = await this.#fetchPage(token, this.#options.initialPageSize);
       pages += 1;
@@ -54,6 +60,9 @@ export class Paginator<TItem, TPage> {
       if (next === null || next === undefined || next === "") {
         return;
       }
+      if (seen.has(next))
+        throw new Error("paginator repeated cursor (maxPages would not terminate)");
+      seen.add(next);
       token = next;
     }
   }
