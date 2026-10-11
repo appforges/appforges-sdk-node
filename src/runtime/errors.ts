@@ -55,6 +55,13 @@ export class APIError extends AppForgesError {
   }
 }
 
+/** Gateway quota exhaustion is available even when the OAS has no error catalog. */
+export class RateLimitExceededError extends APIError {
+  constructor(init: TypedErrorInit) {
+    super(init.message ?? "rate limit exceeded", init);
+  }
+}
+
 /** The request exceeded its configured timeout and was aborted. */
 export class RequestTimeoutError extends AppForgesError {}
 
@@ -103,11 +110,18 @@ export interface GoogleRpcStatus {
 /** Best-effort parse of a `google.rpc.Status` payload; undefined when the body is not one. */
 export function parseErrorStatus(body: unknown): GoogleRpcStatus | undefined {
   if (typeof body !== "object" || body === null) return undefined;
-  const record = body as Record<string, unknown>;
+  const envelope = body as Record<string, unknown>;
+  // apigw wraps google.rpc.Status in { error: ... }; direct Status is also
+  // accepted for Connect-compatible callers and existing generated clients.
+  const record =
+    typeof envelope.error === "object" && envelope.error !== null
+      ? (envelope.error as Record<string, unknown>)
+      : envelope;
   if (typeof record.code !== "number" && typeof record.message !== "string") return undefined;
   const details = Array.isArray(record.details)
     ? record.details.filter(
-        (d): d is NonNullable<GoogleRpcStatus["details"]>[number] => typeof d === "object" && d !== null,
+        (d): d is NonNullable<GoogleRpcStatus["details"]>[number] =>
+          typeof d === "object" && d !== null,
       )
     : undefined;
   return {
@@ -134,7 +148,9 @@ export function errorFromResponse(body: unknown, context: ErrorContext): AppForg
   const info = status?.details?.find((d) => typeof d.reason === "string");
   const message = status?.message ?? `request failed with HTTP ${context.httpStatus}`;
   if (info?.reason) {
-    const ctor = registry.get(info.reason);
+    const ctor =
+      registry.get(info.reason) ??
+      (info.reason === "RATE_LIMIT_EXCEEDED" ? RateLimitExceededError : undefined);
     const init: TypedErrorInit = {
       reason: info.reason,
       domain: info.domain,
@@ -143,7 +159,12 @@ export function errorFromResponse(body: unknown, context: ErrorContext): AppForg
       ...context,
     };
     if (ctor) return new ctor(init);
-    return new APIError(message, { ...context, reason: info.reason, domain: info.domain, metadata: info.metadata });
+    return new APIError(message, {
+      ...context,
+      reason: info.reason,
+      domain: info.domain,
+      metadata: info.metadata,
+    });
   }
   return new APIError(message, context);
 }

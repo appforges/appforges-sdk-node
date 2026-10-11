@@ -29,13 +29,20 @@ export {
   APIError,
   AppForgesError,
   RequestTimeoutError,
+  RateLimitExceededError,
   clearErrorReasonsForTest,
   errorFromResponse,
   lookupErrorReason,
   parseErrorStatus,
   registerErrorReason,
 } from "./errors.js";
-export type { AppForgesErrorOptions, ErrorContext, GoogleRpcStatus, TypedErrorConstructor, TypedErrorInit } from "./errors.js";
+export type {
+  AppForgesErrorOptions,
+  ErrorContext,
+  GoogleRpcStatus,
+  TypedErrorConstructor,
+  TypedErrorInit,
+} from "./errors.js";
 export { newRequestId, responseRequestId, responseTraceId } from "./request-id.js";
 export { Paginator } from "./pagination.js";
 export type { PageProjection, PaginatorOptions } from "./pagination.js";
