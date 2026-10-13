@@ -34,9 +34,9 @@ try {
 
 ## Services in this release
 
-- `appforges.creative.v1` 0.61.0
-- `appforges.iam.v1` 0.61.0
-- `appforges.pinpage.v1` 0.61.0
+- `appforges.creative.v1` 0.62.0
+- `appforges.iam.v1` 0.62.0
+- `appforges.pinpage.v1` 0.62.0
 
 Wire payloads are snake_case and pass through untouched; see the API
 reference at https://developer.appforges.com.
